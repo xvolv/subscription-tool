@@ -1,33 +1,52 @@
 import { workflowClient } from "../config/upstash.js";
 import Subscription from "../models/subscription.model.js";
 import { SERVER_URL } from "../config/env.js";
+
 export const createSubscription = async (req, res, next) => {
   try {
     const subscription = await Subscription.create({
       ...req.body,
       user: req.user._id,
     });
-    console.log(subscription._id + "----" + subscription.id);
-    const idontknowwhatthisis = await workflowClient.trigger({
-      // url: `${SERVER_URL}/api/v1/workflows/subscription/reminder`,
-      url: `${SERVER_URL}/api/v1/workflows/subscription/reminder`,
-      body: {
-        subscriptionId: subscription.id,
-      },
-      headers: {
-        "Content-Type": "application/json",
-      },
-      retries: 0,
-    });
-    const url = `${SERVER_URL}/api/v1/workflows/subscription/reminder`;
-    console.log(idontknowwhatthisis, "this this this");
-    console.log("Workflow triggered successfully");
-    console.log("this is the url", url);
+
+    // Check for existing active workflow runs
+    const hasActiveWorkflow = subscription.workflowRuns.some(
+      (run) => run.status === "active"
+    );
+
+    if (!hasActiveWorkflow) {
+      const workflowResponse = await workflowClient.trigger({
+        url: `${SERVER_URL}/api/v1/workflows/subscription/reminder`,
+        body: {
+          subscriptionId: subscription.id,
+        },
+        headers: {
+          "Content-Type": "application/json",
+        },
+        retries: 0,
+      });
+
+      // Add the new workflow run to the subscription
+      subscription.workflowRuns.push({
+        workflowRunId: workflowResponse.workflowRunId,
+        status: "active",
+      });
+      await subscription.save();
+
+      console.log(
+        "Workflow triggered successfully:",
+        workflowResponse.workflowRunId
+      );
+    } else {
+      console.log("Active workflow already exists for this subscription");
+    }
 
     res.status(201).json({
       success: true,
       data: subscription,
-      workflowRunId: idontknowwhatthisis.workflowRunId,
+      workflowRunId:
+        subscription.workflowRuns[subscription.workflowRuns.length - 1]
+          ?.workflowRunId,
     });
   } catch (error) {
     next(error);

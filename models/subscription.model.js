@@ -67,6 +67,18 @@ const subscriptionSchema = mongoose.Schema(
       required: true,
       index: true,
     },
+    workflowRuns: [{
+      workflowRunId: String,
+      status: {
+        type: String,
+        enum: ['active', 'completed', 'failed'],
+        default: 'active'
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now
+      }
+    }]
   },
   { timestamps: true }
 );
@@ -85,7 +97,8 @@ subscriptionSchema.pre("save", function (next) {
     );
   }
   if (this.renewalDate < new Date()) {
-    //
+    console.log(this.renewalDate + "<<<" + new Date());
+
     this.status = "expired";
   }
 
